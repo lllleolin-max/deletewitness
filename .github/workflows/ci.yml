@@ -1,0 +1,19 @@
+name: ordinary-installed-application
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip wheel . --no-deps --wheel-dir dist
+      - run: python -m pip install --no-deps --find-links dist deletewitness
+      - run: python -I -m unittest discover -s tests -v
+      - run: python -I examples/workflow.py
