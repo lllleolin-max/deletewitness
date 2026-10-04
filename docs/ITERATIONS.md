@@ -49,3 +49,30 @@ upload is preserved UNKNOWN rather than guessing put vs replace. This changes
 the deficient protocol, not the original actual-kill probe or support scope.
 Exact after installed verification follows; quota/test/migration coverage is
 part of this repair and is not separately counted as another cycle.
+
+After6734c7287ddbc1ccd52f15307bc959a887f6e36c, exact ordinary five-module
+association/14suite/actual SQL filesystem workflow/CLI/pipcheck and the unchanged
+actual-kill replacement probe all exit0. Recovery returns RECOVERED_REPLACEMENT,
+one new281byte reference/full-content hash and old path gone after reconciliation.
+UTC2026-10-04T22:50:16.948757–22:50:56.158172, wheel SHA256
+c3777dd867170df75bba473bfef854f3de3e8edc9879c2215886e823e999955b.
+
+## Round2 — concrete reference counts must not count unpublished allocations
+
+Before6734c7287ddbc1ccd52f15307bc959a887f6e36c, original
+receipt_reference_count.py coordinates a real public uploader AFTER durable
+allocation but BEFORE file/reference publication. Native SQL observes0references
+and1upload. Deletion/reconciliation safely cancels it but both initial/final
+receipt claim removed_references=1. Actual original installed probe exits1;
+the complete native/public results are retained. This is a false concrete witness,
+not claimed data loss or an extra replacement finding. Privacy/body clearing and
+filesystem safety continue to work.
+
+Correction records actual reference removals and cancelled upload allocations
+separately in the tombstone transaction. New receipts expose counts_exact=true;
+old ambiguous counts are preserved explicitly as legacy_unverified_candidates
+with null actual counts rather than invented history. Same original public
+concurrent/native SQL probe must report removed0/cancelled1 and unchanged safe
+cleanup, exit0. Exact original probe hash and after receipt are external records.
+Independent review may assign the witness-accuracy severity/round weight; new
+known supported counterexamples still require repair beyond a target count.

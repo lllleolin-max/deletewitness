@@ -11,7 +11,7 @@ CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE profiles(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,body BLOB,deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN(0,1)),delete_request TEXT);
 CREATE TABLE blobs(id TEXT PRIMARY KEY,size INTEGER NOT NULL CHECK(size>=0),digest TEXT,identity TEXT,state TEXT NOT NULL CHECK(state IN('uploading','ready','deleting','gone')),staged_for TEXT,upload_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(upload_mode IN('legacy','put','replace')),replace_of TEXT);
 CREATE TABLE refs(tenant TEXT NOT NULL,profile TEXT NOT NULL REFERENCES profiles(id),blob TEXT NOT NULL REFERENCES blobs(id),PRIMARY KEY(profile,blob));
-CREATE TABLE requests(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,profile TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('delete','replace')),removed INTEGER NOT NULL,created_ns INTEGER NOT NULL);
+CREATE TABLE requests(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,profile TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('delete','replace')),removed INTEGER NOT NULL,created_ns INTEGER NOT NULL,cancelled_uploads INTEGER);
 CREATE TABLE items(request TEXT NOT NULL REFERENCES requests(id),blob TEXT NOT NULL REFERENCES blobs(id),status TEXT NOT NULL CHECK(status IN('PENDING','SHARED','UNLINKED','ABSENT','UNKNOWN')),reason TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,observed_ns INTEGER,PRIMARY KEY(request,blob));
 CREATE INDEX refs_blob ON refs(blob);
 CREATE INDEX items_pending ON items(status,blob);
@@ -86,6 +86,8 @@ class Store:
             columns={r[1] for r in c.execute('PRAGMA table_info(blobs)')}
             if 'upload_mode' not in columns:c.execute("ALTER TABLE blobs ADD COLUMN upload_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(upload_mode IN('legacy','put','replace'))")
             if 'replace_of' not in columns:c.execute('ALTER TABLE blobs ADD COLUMN replace_of TEXT')
+            request_columns={r[1] for r in c.execute('PRAGMA table_info(requests)')}
+            if 'cancelled_uploads' not in request_columns:c.execute('ALTER TABLE requests ADD COLUMN cancelled_uploads INTEGER')
             yield c;c.commit()
         except sqlite3.Error:
             if c is not None:c.rollback()
@@ -124,9 +126,9 @@ class Store:
             row=self._active(c,ctx,pid)
             return dict(id=pid,tenant=ctx.tenant,profile=decode(row['body']),attachments=[r[0] for r in c.execute('SELECT blob FROM refs WHERE profile=? ORDER BY blob',(pid,))])
 
-    def _new_request(self,c,ctx,pid,kind,removed):
+    def _new_request(self,c,ctx,pid,kind,removed,cancelled_uploads=0):
         self._quota(c,'requests',self.limits.requests);request=new_id()
-        c.execute('INSERT INTO requests VALUES(?,?,?,?,?,?)',(request,ctx.tenant,pid,kind,removed,time.time_ns()))
+        c.execute('INSERT INTO requests(id,tenant,profile,kind,removed,created_ns,cancelled_uploads) VALUES(?,?,?,?,?,?,?)',(request,ctx.tenant,pid,kind,removed,time.time_ns(),cancelled_uploads))
         return request
 
     def _item(self,c,request,blob):
@@ -211,9 +213,10 @@ class Store:
             if row is None:fail('profile_missing')
             if row['deleted']:request=row['delete_request']
             else:
-                blobs={r[0] for r in c.execute('SELECT blob FROM refs WHERE profile=?',(pid,))}
-                blobs.update(r[0] for r in c.execute("SELECT id FROM blobs WHERE staged_for=? AND state='uploading'",(pid,)))
-                request=self._new_request(c,ctx,pid,'delete',len(blobs))
+                references={r[0] for r in c.execute('SELECT blob FROM refs WHERE profile=?',(pid,))}
+                uploads={r[0] for r in c.execute("SELECT id FROM blobs WHERE staged_for=? AND state='uploading'",(pid,))}
+                blobs=references|uploads
+                request=self._new_request(c,ctx,pid,'delete',len(references),len(uploads))
                 c.execute('UPDATE profiles SET body=NULL,deleted=1,delete_request=? WHERE id=?',(request,pid))
                 c.execute('DELETE FROM refs WHERE profile=?',(pid,))
                 for blob in sorted(blobs):self._item(c,request,blob)
@@ -227,7 +230,8 @@ class Store:
             if row is None:fail('request_missing')
             blocked=bool(c.execute('SELECT deleted FROM profiles WHERE id=?',(row['profile'],)).fetchone()[0])
             items=[dict(r) for r in c.execute('SELECT blob,status,reason,attempts,observed_ns FROM items WHERE request=? ORDER BY blob',(request,))]
-            return dict(request=request,profile=row['profile'],tenant=row['tenant'],kind=row['kind'],logical_blocked=blocked,removed_references=row['removed'],items=items,settled=all(i['status'] in ('SHARED','UNLINKED','ABSENT') for i in items),physical_erasure='NOT_VERIFIED',observed_scope='Owned paths at recorded observations; already-open readers/copies/backups not revoked')
+            exact=row['cancelled_uploads'] is not None
+            return dict(request=request,profile=row['profile'],tenant=row['tenant'],kind=row['kind'],logical_blocked=blocked,removed_references=row['removed'] if exact else None,cancelled_uploads=row['cancelled_uploads'],counts_exact=exact,legacy_unverified_candidates=None if exact else row['removed'],items=items,settled=all(i['status'] in ('SHARED','UNLINKED','ABSENT') for i in items),physical_erasure='NOT_VERIFIED',observed_scope='Owned paths at recorded observations; already-open readers/copies/backups not revoked')
 
     @staticmethod
     def _observe(c,blob,status,reason):

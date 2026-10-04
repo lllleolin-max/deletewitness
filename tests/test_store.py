@@ -110,8 +110,18 @@ class ApplicationTests(unittest.TestCase):
         t=threading.Thread(target=put);t.start();self.assertTrue(ready.wait(5))
         request=s.delete_profile(self.ctx,p);proceed.set();t.join(5)
         self.assertFalse(t.is_alive());self.assertEqual(errors,['profile_deleted'])
+        self.assertEqual(request['removed_references'],0);self.assertEqual(request['cancelled_uploads'],1);self.assertTrue(request['counts_exact'])
         s.reconcile(self.ctx);self.assertTrue(s.receipt(self.ctx,request['request'])['settled'])
         self.assertFalse(list(self.root.glob('blob_*.bin')))
+
+    def test_old_receipt_count_uncertainty_is_preserved(self):
+        s=self.make();p=s.create_profile(self.ctx,{});s.put_attachment(self.ctx,p,b'old')
+        request=s.delete_profile(self.ctx,p)['request']
+        with closing(sqlite3.connect(self.db)) as c:
+            c.execute('ALTER TABLE requests DROP COLUMN cancelled_uploads');c.commit()
+        recovered=Store(self.db,self.root);view=recovered.receipt(self.ctx,request)
+        self.assertFalse(view['counts_exact']);self.assertIsNone(view['removed_references']);self.assertEqual(view['legacy_unverified_candidates'],1)
+        recovered.reconcile(self.ctx);self.assertTrue(recovered.receipt(self.ctx,request)['settled'])
 
     def kill_at(self,phase):
         s=self.make();p=s.create_profile(self.ctx,{'private':'kill-fixture'});blob=s.put_attachment(self.ctx,p,b'kill actual file')

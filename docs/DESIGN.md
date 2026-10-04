@@ -31,6 +31,13 @@ Shared references make a terminal SHARED observation for that request. Later
 last-reference deletion has its own work and receipt; a SHARED receipt records
 that historical protection, not a permanent promise the file still exists.
 
+Receipts record the actual removed reference count separately from cancelled
+staged-upload allocations. The latter may have no published reference or file.
+Both are committed with the tombstone; they are not inferred from work-item
+count. Old receipts lacking that distinction expose counts_exact=false,
+removed_references=null and legacy_unverified_candidates; migration cannot
+reconstruct lost observations and does not silently relabel them as exact.
+
 POSIX identity uses native inode/device/size/mtime/ctime. Windows uses an open
 handle's native FILE_BASIC_INFO ChangeTime consistently; Python's historical
 Windows ctime can represent birth time for path stat and different time for a
