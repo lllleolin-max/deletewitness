@@ -181,7 +181,9 @@ else:s.reconcile(Context('tenant',True))
             before=journal.read_bytes();self.refusal('foreign_sidecar',lambda:Store(s.database,s.root));self.assertEqual(journal.read_bytes(),before)
 
     def test_registered_cli_complete_binary_read_and_refused_consumer(self):
-        cli=Path(sys.executable).parent/('deletewitness.exe' if os.name=='nt' else 'deletewitness')
+        import sysconfig
+        cli=Path(sysconfig.get_path('scripts'))/('deletewitness.exe' if os.name=='nt' else 'deletewitness')
+        self.assertTrue(cli.is_file(),f'registered console executable absent from installation scripts directory: {cli}')
         common=[str(cli),'--database',str(self.db),'--root',str(self.root),'--tenant','tenant']
         def run(args,expected=0):
             r=subprocess.run(common+args,capture_output=True,timeout=10);self.assertEqual(r.returncode,expected,r.stderr.decode());return r.stdout
