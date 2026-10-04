@@ -76,3 +76,32 @@ concurrent/native SQL probe must report removed0/cancelled1 and unchanged safe
 cleanup, exit0. Exact original probe hash and after receipt are external records.
 Independent review may assign the witness-accuracy severity/round weight; new
 known supported counterexamples still require repair beyond a target count.
+
+Afterbcff4616d6927760e38a028023c7f3a90a13f2c7, exact ordinary five-module
+association/15suite/SQL filesystem workflow/registered CLI/pipcheck and unchanged
+reference-count plus replacement-kill probes exit0. Receipt now reports actual
+removed0/cancelled1/counts_exact=true without changing safe cleanup. UTC
+2026-10-04T22:54:01.210532–22:54:29.900300; wheel SHA256
+597e40cba361f2f6215637d11660e9ee8003ace28900a5481c40c8aa4d58ece8.
+
+## Round3 — a permanent UNKNOWN must not monopolize every bounded batch
+
+Beforebcff4616d6927760e38a028023c7f3a90a13f2c7, original bounded_progress.py
+creates2actual durable deletion intents. The UUID-order-first file is genuinely
+overwritten; it correctly becomes UNKNOWN and its1068complete bytes/hash are
+preserved. But limit1 reconciliation always chooses that same UUID: first and
+second calls both retry UNKNOWN, leaving the independent intact next file
+PENDING/path present. Every further bounded call has the same selection and no
+caller cursor exists to advance. Original ordinary installed probe exits1,
+complete receipt/native SQL/file results retained. No damaged-file deletion or
+already-known replacement-recovery defect is counted as this new liveness issue.
+
+Correction persistently rotates by least-recently-attempted work sequence and
+UUID tie. Batch1–256 remains bounded, ambiguous files remain UNKNOWN, and the
+next finite intact intent gets a turn even after restart. Sequence updates share
+the receipt transaction; real kill can roll back an attempt without losing its
+durable pending intent. It uses logical sequence, not wall-clock ordering. The
+same original two-call probe must preserve UNKNOWN and actually unlink the
+independent intact next file, exit0. Additive owned migration and index support
+old pending work. This actual partial-processing repair does not add a fourth
+round for tests/docs/metrics or new initial features.

@@ -9,12 +9,13 @@ from .model import APP_ID,VERSION,MAX_REFS,Context,Limits,WitnessError,decode,en
 SCHEMA='''
 CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE profiles(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,body BLOB,deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN(0,1)),delete_request TEXT);
-CREATE TABLE blobs(id TEXT PRIMARY KEY,size INTEGER NOT NULL CHECK(size>=0),digest TEXT,identity TEXT,state TEXT NOT NULL CHECK(state IN('uploading','ready','deleting','gone')),staged_for TEXT,upload_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(upload_mode IN('legacy','put','replace')),replace_of TEXT);
+CREATE TABLE blobs(id TEXT PRIMARY KEY,size INTEGER NOT NULL CHECK(size>=0),digest TEXT,identity TEXT,state TEXT NOT NULL CHECK(state IN('uploading','ready','deleting','gone')),staged_for TEXT,upload_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(upload_mode IN('legacy','put','replace')),replace_of TEXT,work_seq INTEGER NOT NULL DEFAULT 0 CHECK(work_seq>=0));
 CREATE TABLE refs(tenant TEXT NOT NULL,profile TEXT NOT NULL REFERENCES profiles(id),blob TEXT NOT NULL REFERENCES blobs(id),PRIMARY KEY(profile,blob));
 CREATE TABLE requests(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,profile TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('delete','replace')),removed INTEGER NOT NULL,created_ns INTEGER NOT NULL,cancelled_uploads INTEGER);
 CREATE TABLE items(request TEXT NOT NULL REFERENCES requests(id),blob TEXT NOT NULL REFERENCES blobs(id),status TEXT NOT NULL CHECK(status IN('PENDING','SHARED','UNLINKED','ABSENT','UNKNOWN')),reason TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,observed_ns INTEGER,PRIMARY KEY(request,blob));
 CREATE INDEX refs_blob ON refs(blob);
 CREATE INDEX items_pending ON items(status,blob);
+CREATE INDEX blobs_work ON blobs(state,work_seq,id);
 '''
 TABLES={'settings','profiles','blobs','refs','requests','items'}
 
@@ -47,7 +48,7 @@ class Store:
                 c.execute('PRAGMA max_page_count=8192');c.execute('PRAGMA application_id='+str(APP_ID));c.execute('PRAGMA user_version='+str(VERSION))
                 c.executescript(SCHEMA)
                 c.execute('BEGIN IMMEDIATE')
-                values={'namespace':namespace,'root':str(directory),'root_identity':json.dumps(dict(dev=root_info.st_dev,ino=root_info.st_ino)),'limits':json.dumps(asdict(limits))}
+                values={'namespace':namespace,'root':str(directory),'root_identity':json.dumps(dict(dev=root_info.st_dev,ino=root_info.st_ino)),'limits':json.dumps(asdict(limits)),'work_sequence':'0'}
                 c.executemany('INSERT INTO settings VALUES(?,?)',values.items());c.commit()
             finally:c.close()
         except (OSError,sqlite3.Error):fail('initialization_unknown')
@@ -86,6 +87,9 @@ class Store:
             columns={r[1] for r in c.execute('PRAGMA table_info(blobs)')}
             if 'upload_mode' not in columns:c.execute("ALTER TABLE blobs ADD COLUMN upload_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(upload_mode IN('legacy','put','replace'))")
             if 'replace_of' not in columns:c.execute('ALTER TABLE blobs ADD COLUMN replace_of TEXT')
+            if 'work_seq' not in columns:c.execute('ALTER TABLE blobs ADD COLUMN work_seq INTEGER NOT NULL DEFAULT 0 CHECK(work_seq>=0)')
+            c.execute('CREATE INDEX IF NOT EXISTS blobs_work ON blobs(state,work_seq,id)')
+            c.execute("INSERT OR IGNORE INTO settings VALUES('work_sequence','0')")
             request_columns={r[1] for r in c.execute('PRAGMA table_info(requests)')}
             if 'cancelled_uploads' not in request_columns:c.execute('ALTER TABLE requests ADD COLUMN cancelled_uploads INTEGER')
             yield c;c.commit()
@@ -243,9 +247,14 @@ class Store:
         if not ctx.operator:fail('operator_required')
         processed=[]
         with self._tx() as c:
-            rows=c.execute("SELECT * FROM blobs WHERE state IN('deleting','uploading') ORDER BY id LIMIT ?",(limit,)).fetchall()
+            try:sequence=int(self._setting(c,'work_sequence'))
+            except (TypeError,ValueError):fail('invalid_schema')
+            sequence=max(sequence,c.execute('SELECT coalesce(max(work_seq),0) FROM blobs').fetchone()[0])
+            integer(sequence,0,2**63-257)
+            rows=c.execute("SELECT * FROM blobs WHERE state IN('deleting','uploading') ORDER BY work_seq,id LIMIT ?",(limit,)).fetchall()
             for row in rows:
                 blob=row['id'];path=files.blob_path(self.root,blob)
+                sequence+=1;c.execute('UPDATE blobs SET work_seq=? WHERE id=?',(sequence,blob))
                 if row['state']=='uploading':
                     processed.append(self._recover_upload(c,row,path));continue
                 if c.execute('SELECT 1 FROM refs WHERE blob=?',(blob,)).fetchone():
@@ -263,8 +272,9 @@ class Store:
                     reason=error.code if isinstance(error,WitnessError) else 'io_unknown'
                     self._observe(c,blob,'UNKNOWN',reason);status='UNKNOWN'
                 processed.append(dict(blob=blob,status=status))
+            c.execute("UPDATE settings SET value=? WHERE key='work_sequence'",(str(sequence),))
             pending=c.execute("SELECT count(*) FROM blobs WHERE state IN('deleting','uploading')").fetchone()[0]
-        return dict(processed=processed,pending_blobs=pending,physical_erasure='NOT_VERIFIED')
+        return dict(processed=processed,pending_blobs=pending,work_sequence=sequence,physical_erasure='NOT_VERIFIED')
 
     def _recover_upload(self,c,row,path):
         blob=row['id'];pid=row['staged_for']

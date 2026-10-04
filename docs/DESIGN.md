@@ -52,7 +52,12 @@ afterwards. Crash after intent commit is recoverable; crash after unlink rolls
 back only the DB observation, so retry records ABSENT. This is deliberately
 weaker than proving who removed it or physical data destruction. New cooperating
 references to deleting/gone blobs refuse. File changes, aliases and I/O faults
-yield UNKNOWN, preserving the ambiguous current path.
+yield UNKNOWN, preserving the ambiguous current path. Bounded batches rotate
+using a durable least-recent-attempt logical sequence, then UUID tie, so an
+UNKNOWN cannot monopolize every batch ahead of other finite pending intents.
+Each committed attempt advances sequence; a killed transaction may roll it
+back and retry, consistent with the still-pending effect observation. No timing
+or immediate completion promise is made for genuinely unavailable files.
 
 The database lives outside the owned attachment directory, with reserved native
 SQLite main/-journal/-wal/-shm names. Reopen validates ordinary single-link main

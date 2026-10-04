@@ -85,6 +85,18 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(done['items'][0]['status'],'UNKNOWN');self.assertFalse(done['settled'])
         self.assertEqual(self.path(blob).read_bytes(),b'NEW unrelated replacement')
 
+    def test_finite_partial_work_progresses_past_unknown(self):
+        s=self.make();jobs=[]
+        for n in range(2):
+            p=s.create_profile(self.ctx,{});blob=s.put_attachment(self.ctx,p,b'original'+bytes([n]));jobs.append((blob,p))
+        jobs.sort();unknown,good=jobs
+        requests={blob:s.delete_profile(self.ctx,p)['request'] for blob,p in jobs}
+        self.path(unknown[0]).write_bytes(b'preserve replaced current content')
+        s.reconcile(self.ctx,limit=1);restarted=Store(self.db,self.root);restarted.reconcile(self.ctx,limit=1)
+        self.assertEqual(restarted.receipt(self.ctx,requests[unknown[0]])['items'][0]['status'],'UNKNOWN')
+        self.assertTrue(restarted.receipt(self.ctx,requests[good[0]])['settled']);self.assertFalse(self.path(good[0]).exists())
+        self.assertEqual(self.path(unknown[0]).read_bytes(),b'preserve replaced current content')
+
     def test_hardlink_detection_preserves_other_path(self):
         s=self.make();p=s.create_profile(self.ctx,{});blob=s.put_attachment(self.ctx,p,b'linked')
         outside=self.base/'outside.bin';os.link(self.path(blob),outside)
