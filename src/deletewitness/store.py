@@ -9,7 +9,7 @@ from .model import APP_ID,VERSION,MAX_REFS,Context,Limits,WitnessError,decode,en
 SCHEMA='''
 CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE profiles(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,body BLOB,deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN(0,1)),delete_request TEXT);
-CREATE TABLE blobs(id TEXT PRIMARY KEY,size INTEGER NOT NULL CHECK(size>=0),digest TEXT,identity TEXT,state TEXT NOT NULL CHECK(state IN('uploading','ready','deleting','gone')),staged_for TEXT);
+CREATE TABLE blobs(id TEXT PRIMARY KEY,size INTEGER NOT NULL CHECK(size>=0),digest TEXT,identity TEXT,state TEXT NOT NULL CHECK(state IN('uploading','ready','deleting','gone')),staged_for TEXT,upload_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(upload_mode IN('legacy','put','replace')),replace_of TEXT);
 CREATE TABLE refs(tenant TEXT NOT NULL,profile TEXT NOT NULL REFERENCES profiles(id),blob TEXT NOT NULL REFERENCES blobs(id),PRIMARY KEY(profile,blob));
 CREATE TABLE requests(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,profile TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('delete','replace')),removed INTEGER NOT NULL,created_ns INTEGER NOT NULL);
 CREATE TABLE items(request TEXT NOT NULL REFERENCES requests(id),blob TEXT NOT NULL REFERENCES blobs(id),status TEXT NOT NULL CHECK(status IN('PENDING','SHARED','UNLINKED','ABSENT','UNKNOWN')),reason TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,observed_ns INTEGER,PRIMARY KEY(request,blob));
@@ -83,6 +83,9 @@ class Store:
             c.execute('BEGIN IMMEDIATE')
             tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if tables!=TABLES or self._setting(c,'namespace')!=self.marker['namespace'] or self._setting(c,'root')!=str(self.root):fail('invalid_schema')
+            columns={r[1] for r in c.execute('PRAGMA table_info(blobs)')}
+            if 'upload_mode' not in columns:c.execute("ALTER TABLE blobs ADD COLUMN upload_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(upload_mode IN('legacy','put','replace'))")
+            if 'replace_of' not in columns:c.execute('ALTER TABLE blobs ADD COLUMN replace_of TEXT')
             yield c;c.commit()
         except sqlite3.Error:
             if c is not None:c.rollback()
@@ -142,10 +145,12 @@ class Store:
         with self._tx() as c:
             self._active(c,ctx,pid);self._quota(c,'blobs',self.limits.blobs)
             if replace is None and c.execute('SELECT count(*) FROM refs WHERE profile=?',(pid,)).fetchone()[0]>=MAX_REFS:fail('references_quota')
-            if replace is not None and not c.execute('SELECT 1 FROM refs WHERE profile=? AND blob=?',(pid,replace)).fetchone():fail('reference_missing')
+            if replace is not None:
+                if not c.execute('SELECT 1 FROM refs WHERE profile=? AND blob=?',(pid,replace)).fetchone():fail('reference_missing')
+                self._quota(c,'requests',self.limits.requests)
             tracked=c.execute("SELECT coalesce(sum(size),0) FROM blobs WHERE state!='gone'").fetchone()[0]
             if tracked+len(raw)>self.limits.tracked_bytes:fail('tracked_bytes_quota')
-            c.execute("INSERT INTO blobs VALUES(?,?,?,NULL,'uploading',?)",(blob,len(raw),files.digest(raw),pid))
+            c.execute("INSERT INTO blobs(id,size,digest,identity,state,staged_for,upload_mode,replace_of) VALUES(?,?,?,NULL,'uploading',?,?,?)",(blob,len(raw),files.digest(raw),pid,'replace' if replace is not None else 'put',replace))
         self.checkpoint('upload_allocated',blob)
         try:
             with self._tx() as c:
@@ -154,6 +159,7 @@ class Store:
                 if row['state']!='uploading':fail('upload_cancelled')
                 if replace is None and c.execute('SELECT count(*) FROM refs WHERE profile=?',(pid,)).fetchone()[0]>=MAX_REFS:fail('references_quota')
                 if replace is not None and not c.execute('SELECT 1 FROM refs WHERE profile=? AND blob=?',(pid,replace)).fetchone():fail('reference_missing')
+                if replace is not None:self._quota(c,'requests',self.limits.requests)
                 expected=files.create_file(files.blob_path(self.root,blob),raw)
                 self.checkpoint('upload_created',blob)
                 c.execute("UPDATE blobs SET identity=?,state='ready',staged_for=NULL WHERE id=?",(json.dumps(expected),blob))
@@ -262,12 +268,20 @@ class Store:
         try:
             info=files.regular(path)
             if not active or active['deleted'] or not row['digest']:return dict(blob=blob,status='UNKNOWN',reason='upload_owner_missing')
-            if c.execute('SELECT count(*) FROM refs WHERE profile=?',(pid,)).fetchone()[0]>=MAX_REFS:return dict(blob=blob,status='UNKNOWN',reason='references_quota')
+            if row['upload_mode']=='legacy':return dict(blob=blob,status='UNKNOWN',reason='legacy_upload_operation_unknown')
+            if row['upload_mode']=='put' and c.execute('SELECT count(*) FROM refs WHERE profile=?',(pid,)).fetchone()[0]>=MAX_REFS:return dict(blob=blob,status='UNKNOWN',reason='references_quota')
+            if row['upload_mode']=='replace':
+                if not row['replace_of'] or not c.execute('SELECT 1 FROM refs WHERE profile=? AND blob=?',(pid,row['replace_of'])).fetchone():return dict(blob=blob,status='UNKNOWN',reason='replacement_reference_changed')
+                if c.execute('SELECT count(*) FROM requests').fetchone()[0]>=self.limits.requests:return dict(blob=blob,status='UNKNOWN',reason='requests_quota')
             expected=files.path_identity(path)
             files.read_checked(path,expected,row['digest'],self.limits.blob_bytes)
             c.execute("UPDATE blobs SET identity=?,state='ready',staged_for=NULL WHERE id=?",(json.dumps(expected),blob))
+            if row['upload_mode']=='replace':
+                request=self._new_request(c,Context(active['tenant']),pid,'replace',1)
+                c.execute('DELETE FROM refs WHERE profile=? AND blob=?',(pid,row['replace_of']))
+                self._item(c,request,row['replace_of'])
             self._link(c,active['tenant'],pid,blob)
-            return dict(blob=blob,status='RECOVERED_UPLOAD')
+            return dict(blob=blob,status='RECOVERED_REPLACEMENT' if row['upload_mode']=='replace' else 'RECOVERED_UPLOAD')
         except FileNotFoundError:
             c.execute("UPDATE blobs SET state='gone',digest=NULL,staged_for=NULL WHERE id=?",(blob,))
             return dict(blob=blob,status='ABSENT_UPLOAD')

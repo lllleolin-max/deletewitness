@@ -22,3 +22,30 @@ observations are retained. Product now uses native Windows FILE_BASIC_INFO
 ChangeTime consistently for paths/handles (POSIX uses native ctime); oracle
 connections explicitly close. This prebaseline product/harness work is NOT
 a postbaseline correction cycle, and no actual kill claim comes from an exception.
+
+## Round1 — recover the durable replacement operation, not an extra attachment
+
+Before8ef3a0fa49a7aec7ccf986a08dc7eebd23fa0f88, exact canonical ordinary
+five-module Git LF/archive/wheel/fresh isolated installed association passed;
+12suite6.973s/actual SQL/filesystem workflow/registered CLI/pipcheck exit0.
+Unchanged original replacement_recovery.py SHA256
+03a8dc344b31c9c5412bc0d98089b7717f107c0702055e7bf17e23c51c7b8f39
+then actually killed installed childPID336872 (exit15 on Windows) after new
+replacement file creation and before logical swap commit. Public Store recovery
+was attempted BEFORE native SQLite oracle. Recovery published new281byte content
+as an extra attachment, retained original279byte attachment/ref/path and falsely
+completed as RECOVERED_UPLOAD. The public profile contained both rather than
+the requested replacement; both complete binaries were consumed/hashed. Original
+record/result/raw outputs and child readiness are retained, actual probe exit1.
+
+Correction persists upload_mode and replace_of before filesystem work. Recovery
+validates the still-current old reference, performs new reference publication /
+old removal / last-reference intent atomically and reports RECOVERED_REPLACEMENT.
+Known replacement request quota is checked before allocation and again before
+file creation; recovery refuses to guess or publish when it cannot record the
+required removal. Owned legacy databases receive additive transactional columns;
+active data/normal deletes remain usable, and an old ambiguous interrupted
+upload is preserved UNKNOWN rather than guessing put vs replace. This changes
+the deficient protocol, not the original actual-kill probe or support scope.
+Exact after installed verification follows; quota/test/migration coverage is
+part of this repair and is not separately counted as another cycle.

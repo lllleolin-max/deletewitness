@@ -63,6 +63,21 @@ class ApplicationTests(unittest.TestCase):
         self.refusal('requests_quota',lambda:s.delete_profile(self.ctx,p))
         self.assertEqual(s.get_profile(self.ctx,p)['profile'],{'still':'live'})
 
+    def test_replacement_quota_refuses_before_upload_and_file_effect(self):
+        s=self.make(Limits(requests=0));p=s.create_profile(self.ctx,{});old=s.put_attachment(self.ctx,p,b'old')
+        before=s.inventory(self.ctx)
+        self.refusal('requests_quota',lambda:s.put_attachment(self.ctx,p,b'new',replace=old))
+        self.assertEqual(s.inventory(self.ctx),before);s.reconcile(self.ctx)
+        self.assertEqual(s.get_profile(self.ctx,p)['attachments'],[old]);self.assertEqual(s.read_attachment(self.ctx,p,old),b'old')
+
+    def test_owned_legacy_active_data_migrates_without_guessing_upload(self):
+        s=self.make();p=s.create_profile(self.ctx,{'still':'live'});blob=s.put_attachment(self.ctx,p,b'legacy data')
+        with closing(sqlite3.connect(self.db)) as c:
+            c.execute('ALTER TABLE blobs DROP COLUMN replace_of');c.execute('ALTER TABLE blobs DROP COLUMN upload_mode');c.commit()
+        reopened=Store(self.db,self.root)
+        self.assertEqual(reopened.get_profile(self.ctx,p)['attachments'],[blob])
+        self.assertEqual(reopened.read_attachment(self.ctx,p,blob),b'legacy data')
+
     def test_detected_overwrite_is_unknown_and_preserved(self):
         s=self.make();p=s.create_profile(self.ctx,{});blob=s.put_attachment(self.ctx,p,b'original')
         request=s.delete_profile(self.ctx,p);self.path(blob).write_bytes(b'NEW unrelated replacement')

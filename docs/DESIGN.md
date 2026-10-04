@@ -12,9 +12,18 @@ allocated before file creation so an interrupted upload remains bounded and
 diagnosable. Creation and reference publication happen while holding the same
 database writer lock; replacement swaps references in that transaction. An
 allocated upload whose owner was deleted cannot create a fresh file later.
-Recovery may publish intact staged content for an active owner, report absent
+Upload allocation durably records put vs replace and its exact old blob target.
+Recovery publishes intact staged content for an active owner, report absent
 staging or preserve UNKNOWN. Partial/identity-unknown staging is not silently
 deleted or called a successful upload.
+
+Replacement recovery requires the old reference still belong to that active
+profile, checks removal-receipt budget and swaps both references/creates old
+deletion intent in the same transaction. A concurrently changed old reference
+stays UNKNOWN. Additive owned-schema migration preserves old active data and
+pending deletion work; old interrupted uploads with no recorded put/replace
+instruction remain UNKNOWN because their original operation cannot be recovered
+from bytes alone. No such ambiguity is invented into a successful replacement.
 
 Last-reference removal changes the blob to deleting and clears its content
 digest; retained deletion items contain no payload/digest/original filename.
