@@ -105,3 +105,19 @@ same original two-call probe must preserve UNKNOWN and actually unlink the
 independent intact next file, exit0. Additive owned migration and index support
 old pending work. This actual partial-processing repair does not add a fourth
 round for tests/docs/metrics or new initial features.
+
+Afterf1795ac683d45e20b340ae4df118f834bf6f2d23, canonical ordinary five-module
+association/16suite8.577s/actual SQL/filesystem workflow/registered CLI/pipcheck
+and all3unchanged original probes exit0. Unknown1068byte replacement remains
+identical and the independent good file is unlinked in the next bounded call.
+UTC2026-10-04T22:56:30.190376–22:57:08.249392, wheel SHA256
+3dd099fe6beffb73d3ac0599972d150daaf487eb3cd1b97b0dc4ea723b0ffbfd.
+
+The9b06eb5 pilot/verification commit changes no runtime module and does not count
+as a fourth repair. Thirteen native same-fixture controls/four actual child kills
+all passed whole consumers; no-attachment SQL-only is equal logically and cheaper.
+Its scope prose typo5kills is retained/corrected separately; actual evidence
+always contains4. Maximal1MiB/real hardlinks/damaged namespace controls passed;
+Windows symlink creation privilege failure1314 is an explicit unexecuted case.
+Final documentation/report successor reuses historical pilot via all5runtime
+byte association and executes its own ordinary artifacts/interfaces/probes.
