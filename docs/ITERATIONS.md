@@ -121,3 +121,40 @@ always contains4. Maximal1MiB/real hardlinks/damaged namespace controls passed;
 Windows symlink creation privilege failure1314 is an explicit unexecuted case.
 Final documentation/report successor reuses historical pilot via all5runtime
 byte association and executes its own ordinary artifacts/interfaces/probes.
+
+## Fourth real repair: per-connection SQLite page budget
+
+Independent reviewer found the declared8192page limit was only set on the
+initialization connection. Its ordinary bda public create workload accepted3840
+legal8192byte JSON profiles and grew to8219pages; no native SQL writes were used.
+The unchanged original probe SHA256 is
+3b7b2e63db08682a7b2e4304e45928ff3308a6cd8d875344517a68b58cf724e6.
+Builder copied it byte-for-byte and separately reproduced ordinary bda exit1 at
+23:13:44.788320–23:14:10.847653 UTC2026-10-04:3840profiles/8218pages. UUID-driven
+page-split differences explain the one-page difference; both exceed the cap.
+The original full DB/input/IDs/logs remain preserved in external successor evidence.
+
+Fix775726c03ba9d839fa8278f875887ee4634d4e87 sets and checks the connection-local
+cap on every product connection, before mutations or schema migration. An already
+oversized owned DB is refused as database_over_page_quota without truncation or
+claiming compliance. SQLite SQLITE_FULL becomes private storage_full; it does not
+identify filesystem-full versus quota-full with certainty. Inventory exposes the
+actual product connection limit/pages. The original unchanged probe now exits0:
+3827profiles/8191pages then storage_full, surviving first/last public reads match.
+Ordinary five-module association/16suite6.776s/native workflow/registered CLI/
+pipcheck/all three earlier probes also pass. Canonical packet UTC23:14:33.191941–
+23:15:36.893484; wheel e3417b8f67f951350086062648bad260d256b8b1320bd04c1056c92ffbf7c947.
+
+Additional full-budget consumer accepted3828profiles/8191pages, consumed all
+31358976 active body bytes natively, publicly read surviving profiles and actually
+reconciled a previously committed pending attachment to UNLINKED after growth
+refusal. Reopen/read and inventory still work within cap. Authentic oversized old
+bda database was refused with its complete SHA256 unchanged. This additional
+verification is not another repair round.
+
+Separately, first hosted CI37242624506 passed both Ubuntu jobs but Windows global
+Python CLI tests used the wrong scripts path. Test-only4772e6a50010573c6b4f99fd70a3182394fc9059
+uses sysconfig.get_path('scripts') and asserts the real installed console executable;
+no module substitution or skip. Ordinary sixteen tests and actual CLI pass locally.
+That test-tool correction is not a core repair; the failed CI, original bda freeze
+and its manifest remain intact. Successor four-platform CI remains pending here.

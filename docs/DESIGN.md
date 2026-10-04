@@ -84,6 +84,16 @@ Lifetime tombstones/receipts remain in count budgets; no identity/receipt reuse.
 SQLite page limit is8192pages at default4096byte pages, separately from tracked
 attachment bytes; journals, serialization, filesystem allocation and memory add
 cost. No hard RSS, secure storage hardware or power-failure certification.
+The page cap is reapplied and checked on each product connection. SQLite may
+refuse growth before the exact cap because a transaction needs several pages.
+storage_full rolls back the SQLite transaction and does not assert its cause is
+only this quota rather than an actual full disk. Existing owned databases already
+over8192pages from an older defective version are refused as
+database_over_page_quota; no data is truncated or silently called compliant.
+An operator must stop old writers and perform a separately planned offline
+migration/compaction before using them with the fixed version. Within-cap existing
+data remains readable and existing deletion intents remain reconcilable after a
+growth refusal; the real full-budget/pending-unlink consumer verifies this case.
 
 Context is an authorization result from trusted application code. Normal exact
 tenant filtering and same-tenant reference rights remain in SDK; global reconcile,
