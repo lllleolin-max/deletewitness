@@ -81,6 +81,9 @@ class Store:
         try:
             c=sqlite3.connect(self.database,timeout=1,isolation_level=None);c.row_factory=sqlite3.Row
             c.execute('PRAGMA foreign_keys=ON');c.execute('PRAGMA secure_delete=ON');c.execute('PRAGMA synchronous=EXTRA')
+            # This limit is connection-local. Existing oversized stores cannot
+            # be made compliant by setting it: SQLite returns their current size.
+            if c.execute('PRAGMA max_page_count=8192').fetchone()[0]!=8192:fail('database_over_page_quota')
             c.execute('BEGIN IMMEDIATE')
             tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if tables!=TABLES or self._setting(c,'namespace')!=self.marker['namespace'] or self._setting(c,'root')!=str(self.root):fail('invalid_schema')
@@ -93,8 +96,9 @@ class Store:
             request_columns={r[1] for r in c.execute('PRAGMA table_info(requests)')}
             if 'cancelled_uploads' not in request_columns:c.execute('ALTER TABLE requests ADD COLUMN cancelled_uploads INTEGER')
             yield c;c.commit()
-        except sqlite3.Error:
+        except sqlite3.Error as error:
             if c is not None:c.rollback()
+            if getattr(error,'sqlite_errorcode',None)==sqlite3.SQLITE_FULL:fail('storage_full')
             fail('storage_unknown')
         except BaseException:
             if c is not None:c.rollback()
@@ -312,4 +316,4 @@ class Store:
                 count+=1
                 if count>20001:fail('inventory_limit')
                 if child.name not in known:unknown+=1
-            return dict(profiles=c.execute('SELECT count(*) FROM profiles').fetchone()[0],active_profiles=c.execute('SELECT count(*) FROM profiles WHERE deleted=0').fetchone()[0],references=c.execute('SELECT count(*) FROM refs').fetchone()[0],requests=c.execute('SELECT count(*) FROM requests').fetchone()[0],tracked_bytes=sum(r['size'] for r in rows if r['state']!='gone'),blobs=rows,unknown_directory_entries=unknown,limits=asdict(self.limits),scope='Logical tracked bytes, not RSS, disk allocation or backup erasure')
+            return dict(profiles=c.execute('SELECT count(*) FROM profiles').fetchone()[0],active_profiles=c.execute('SELECT count(*) FROM profiles WHERE deleted=0').fetchone()[0],references=c.execute('SELECT count(*) FROM refs').fetchone()[0],requests=c.execute('SELECT count(*) FROM requests').fetchone()[0],tracked_bytes=sum(r['size'] for r in rows if r['state']!='gone'),blobs=rows,unknown_directory_entries=unknown,limits=asdict(self.limits),sqlite_pages=c.execute('PRAGMA page_count').fetchone()[0],sqlite_page_limit=c.execute('PRAGMA max_page_count').fetchone()[0],scope='Logical tracked bytes, not RSS, disk allocation or backup erasure')
